@@ -65,6 +65,11 @@ button{cursor:pointer}
 /* Bandeaux */
 .notice{margin-top:12px;padding:10px 12px;border-radius:var(--r);font-size:14px;background:var(--surface-2);color:var(--fg);border:1px solid var(--line)}
 .notice.warn{background:var(--clay-soft);border-color:transparent}
+.notice.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.link{background:none;border:0;color:var(--court-ink);font-weight:600;text-decoration:underline;padding:0;min-height:44px;align-self:flex-start;font-size:15px}
+.check{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted);min-height:32px}
+.check input{width:18px;height:18px;accent-color:var(--court)}
+.msg-ok{margin:0;padding:10px 12px;border-radius:10px;background:var(--court-soft);color:var(--fg);font-size:14px}
 
 h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;line-height:1.05}
 h1{font-size:34px;font-weight:800;letter-spacing:.01em}
@@ -290,6 +295,10 @@ button.cell small{font-size:10px;font-weight:600;opacity:.8;margin-top:1px}
         <button class="btn court" type="submit" id="pSubmit">Enregistrer les tarifs</button>
       </form>
     </section>
+
+    <section class="section" id="view-account" hidden aria-labelledby="t-account">
+      <div class="stack" id="accountBox"></div>
+    </section>
   </main>
 </div>
 
@@ -307,6 +316,10 @@ button.cell small{font-size:10px;font-weight:600;opacity:.8;margin-top:1px}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg>
       Club
     </button>
+    <button class="tab" type="button" data-view="account" id="tabAccount" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      Compte
+    </button>
   </div>
 </nav>
 
@@ -314,9 +327,16 @@ button.cell small{font-size:10px;font-weight:600;opacity:.8;margin-top:1px}
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script async src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 (function(){
 "use strict";
+
+/* ---------- Configuration serveur (Supabase) ----------
+   Renseigner l'URL du projet et la clé « anon public » (Project Settings > API).
+   Laisser vide pour le mode démo. */
+const SUPABASE_URL="";
+const SUPABASE_ANON_KEY="";
 
 /* ---------- Données de référence ---------- */
 const CLUB={name:"Atlas Padel Club",city:"Casablanca",open:8*60,close:24*60,peakStart:17*60};
@@ -359,8 +379,12 @@ const state={
   view:"book",date:todayKey(),dur:90,filter:"all",period:"next",
   slots:new Map(),mine:[],mineIds:new Set(),prices:{...DEFAULT_PRICES},
   adminDate:todayKey(),adminBookings:[],sheet:null,lastBooking:null,confirmCancel:null,
-  mode:"loading",uid:null,isAdmin:false,canBook:false,myName:""
+  mode:"loading",uid:null,isAdmin:false,canBook:false,myName:"",myPhone:"",
+  authEnabled:false,email:"",offline:false,
+  auth:{mode:/type=recovery/.test(location.hash)?"recovery":"signin",msg:"",msgBad:false}
 };
+let reloading=false;
+const reloadSoon=()=>{if(!reloading){reloading=true;setTimeout(()=>location.reload(),60)}};
 let store=null;
 
 /* ---------- DOM helper ---------- */
@@ -384,6 +408,11 @@ function errMsg(e){
   if(c==="limit")return"Tu as déjà "+MAX_UPCOMING+" réservations à venir. Annule-en une pour réserver à nouveau.";
   if(c==="invalid_argument")return"Ton accès ne permet pas d'enregistrer. Demande au club un accès Contributeur à cette page.";
   if(c==="quota_exceeded")return"La base de réservations est pleine. Préviens le club.";
+  if(c==="past")return"Ce créneau n'est plus réservable : il a déjà commencé ou dépasse les 7 prochains jours.";
+  if(c==="forbidden")return"Cette action est réservée au gérant du club.";
+  if(c==="auth")return"Ta session a expiré. Reconnecte-toi dans l'onglet Compte.";
+  if(c==="invalid")return"Informations incomplètes ou invalides. Vérifie le formulaire.";
+  if(c==="late")return"Trop tard pour annuler depuis l'app : contacte l'accueil du club.";
   if(c==="revoked"||c==="not_granted")return"L'accès à la base a été retiré. Recharge la page.";
   return"Connexion instable, l'action n'a pas été enregistrée. Réessaie.";
 }
@@ -457,6 +486,244 @@ function makeDemoStore(){
   };
 }
 
+/* ---------- Stockage : serveur Supabase (comptes email + mot de passe) ---------- */
+function mapSbErr(e){
+  const m=String((e&&e.message)||"").trim();
+  if(["conflict","limit","late","past","forbidden","auth","invalid"].includes(m))return{code:m};
+  if(/jwt|not authenticated|permission denied/i.test(m))return{code:"auth"};
+  return{code:"unavailable",message:m};
+}
+async function makeSupabaseStore(){
+  const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+  const here=location.origin+location.pathname;
+  const {data:sess,error:sErr}=await sb.auth.getSession();
+  if(sErr)throw sErr;
+  const user=sess&&sess.session?sess.session.user:null;
+  const uid=user?user.id:null;
+  let profile=null;
+  if(uid){const {data}=await sb.from("profiles").select("full_name,phone,is_admin").eq("id",uid).maybeSingle();profile=data||null}
+  sb.auth.onAuthStateChange((event,session)=>{
+    if(event==="PASSWORD_RECOVERY"){state.auth.mode="recovery";setView("account");return}
+    if(event==="INITIAL_SESSION"||state.auth.mode==="recovery")return;
+    const id=session&&session.user?session.user.id:null;
+    if((event==="SIGNED_IN"||event==="SIGNED_OUT")&&id!==state.uid)reloadSoon();
+  });
+  const toSlot=r=>({key:slotKey(r.court_id,r.date,r.time_min),courtId:r.court_id,date:r.date,time:hhmm(r.time_min),
+    type:r.booking_id?"booking":"block",refId:r.booking_id||r.block_id,reason:(r.blocks&&r.blocks.reason)||""});
+  const toBooking=r=>({id:r.id,code:r.code,courtId:r.court_id,date:r.date,start:hhmm(r.start_min),duration:r.duration,
+    end:hhmm(r.start_min+r.duration),slotKeys:slotKeys(r.court_id,r.date,r.start_min,r.duration),userId:r.user_id,
+    contactName:r.contact_name,phone:r.phone||"",players:r.players,tariff:r.tariff,priceTotal:r.price_total,
+    pricePerPlayer:r.price_per_player,payment:r.payment,paid:r.paid,status:r.status,createdAt:r.created_at});
+  const rpc=async(fn,args)=>{const {data,error}=await sb.rpc(fn,args);if(error)throw mapSbErr(error);return data};
+  const loaders=[];
+  const refreshAll=()=>loaders.forEach(f=>f());
+  function watch(table,filter,load){
+    let t;const soon=()=>{clearTimeout(t);t=setTimeout(load,250)};
+    try{sb.channel("rt-"+table+"-"+rid(6)).on("postgres_changes",{event:"*",schema:"public",table,...(filter?{filter}:{})},soon).subscribe()}catch(e){}
+    setInterval(()=>{if(document.visibilityState==="visible")load()},30000);
+    document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")soon()});
+    loaders.push(load);load();
+  }
+  return{
+    mode:"supabase",uid,isAdmin:!!(profile&&profile.is_admin),canBook:!!uid,
+    myName:(profile&&profile.full_name)||"",myPhone:(profile&&profile.phone)||"",email:(user&&user.email)||"",readOnly:uid?"":"login",
+    onSlots(cb,err){
+      watch("slots",null,async()=>{
+        const out=[];
+        for(let from=0;from<10000;from+=1000){
+          const {data,error}=await sb.from("slots").select("court_id,date,time_min,booking_id,block_id,blocks(reason)")
+            .gte("date",todayKey()).order("date").order("court_id").order("time_min").range(from,from+999);
+          if(error){err&&err(mapSbErr(error));return}
+          out.push(...data);if(data.length<1000)break;
+        }
+        cb(out.map(toSlot));
+      });
+    },
+    onMine(cb,err){
+      if(!uid){cb([]);return}
+      watch("bookings","user_id=eq."+uid,async()=>{
+        const {data,error}=await sb.from("bookings").select("*").eq("user_id",uid).order("date",{ascending:false}).limit(200);
+        if(error){err&&err(mapSbErr(error));return}
+        cb(data.map(toBooking));
+      });
+    },
+    onConfig(cb){
+      watch("settings",null,async()=>{const {data}=await sb.from("settings").select("prices").eq("id",1).maybeSingle();cb(data||null)});
+    },
+    async createBooking(b){
+      const row=await rpc("create_booking",{p_court:b.courtId,p_date:b.date,p_start:toMin(b.start),p_duration:b.duration,
+        p_players:b.players,p_contact:b.contactName,p_phone:b.phone,p_payment:b.payment});
+      refreshAll();return toBooking(Array.isArray(row)?row[0]:row);
+    },
+    async cancelBooking(b){await rpc("cancel_booking",{p_id:b.id});refreshAll()},
+    async markPaid(b,paid){await rpc("set_paid",{p_id:b.id,p_paid:paid})},
+    async getBookings(refs){
+      const ids=refs.map(r=>r.refId);if(!ids.length)return[];
+      const {data,error}=await sb.from("bookings").select("*").in("id",ids);
+      if(error)throw mapSbErr(error);return data.map(toBooking);
+    },
+    async createBlock(blk,cells){
+      await rpc("create_block",{p_court:blk.courtId,p_date:blk.date,p_start:toMin(cells[0].time),
+        p_end:toMin(cells[cells.length-1].time)+30,p_reason:blk.reason});refreshAll();
+    },
+    async removeBlock(refId){await rpc("remove_block",{p_id:refId});refreshAll()},
+    async savePrices(p){await rpc("save_prices",{p_prices:p});refreshAll()},
+    async updateProfile(name,phone){await rpc("update_my_profile",{p_name:name,p_phone:phone})},
+    async signIn(email,pw){const {error}=await sb.auth.signInWithPassword({email,password:pw});if(error)throw error},
+    async signUp(email,pw,name,phone){
+      const {data,error}=await sb.auth.signUp({email,password:pw,options:{data:{full_name:name,phone},emailRedirectTo:here}});
+      if(error)throw error;
+      if(data.user&&Array.isArray(data.user.identities)&&data.user.identities.length===0)throw{message:"User already registered"};
+      return data;
+    },
+    async resetPassword(email){const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:here});if(error)throw error},
+    async updatePassword(pw){const {error}=await sb.auth.updateUser({password:pw});if(error)throw error},
+    async signOut(){await sb.auth.signOut()}
+  };
+}
+
+/* ---------- Compte : inscription, connexion, mot de passe ---------- */
+function authErr(e){
+  const m=String((e&&e.message)||"");
+  if(/invalid login credentials/i.test(m))return"Email ou mot de passe incorrect.";
+  if(/already registered|already been registered|already exists/i.test(m))return"Un compte existe déjà avec cet email. Connecte-toi ou utilise « Mot de passe oublié ».";
+  if(/email not confirmed/i.test(m))return"Ton email n'est pas encore confirmé. Ouvre le lien reçu par email, puis reconnecte-toi.";
+  if(/password/i.test(m)&&/(least|short|weak|characters)/i.test(m))return"Mot de passe trop faible : 8 caractères minimum.";
+  if(/invalid.*email|email.*invalid|unable to validate email/i.test(m))return"Adresse email invalide.";
+  if(/rate limit|security purposes|too many/i.test(m))return"Trop de tentatives. Patiente une minute avant de réessayer.";
+  if(/same password|different from the old/i.test(m))return"Choisis un mot de passe différent de l'ancien.";
+  return"Le serveur n'a pas répondu. Vérifie ta connexion et réessaie.";
+}
+const emailOk=v=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+function field(id,label,attrs){return h("div",{class:"field"},h("label",{class:"label",for:id},label),h("input",{id,...attrs}))}
+function setAuthMsg(text,bad){const el=$("#aMsg");if(!el)return;el.textContent=text||"";el.className=bad?"err":"msg-ok";el.hidden=!text;if(bad)el.setAttribute("role","alert")}
+function authBusy(on,label){const b=$("#aSubmit");if(!b)return;b.disabled=on;if(label)b.textContent=label}
+function showPwToggle(ids){
+  return h("label",{class:"check"},h("input",{type:"checkbox",id:"aShow",onchange:e=>ids.forEach(i=>{const x=$("#"+i);if(x)x.type=e.target.checked?"text":"password"})}),"Afficher le mot de passe");
+}
+function renderAccount(){
+  const box=$("#accountBox"),a=state.auth;
+  if(!state.authEnabled){
+    box.replaceChildren(h("h1",{id:"t-account"},"Compte"),h("div",{class:"empty"},h("strong",{},"Comptes indisponibles"),h("span",{},state.offline?"Le serveur ne répond pas : l'app tourne en mode démo.":"Cette version fonctionne sans compte.")));
+    return;
+  }
+  const msg=h("p",{id:"aMsg",hidden:true});
+  if(a.mode==="recovery"){
+    box.replaceChildren(
+      h("div",{},h("h1",{id:"t-account"},"Nouveau mot de passe"),h("p",{class:"lead"},"Choisis ton nouveau mot de passe (8 caractères minimum).")),
+      h("form",{class:"panel",id:"authForm",novalidate:true,onsubmit:onRecovery},
+        field("rPass","Nouveau mot de passe",{type:"password",autocomplete:"new-password",minlength:"8",required:true}),
+        field("rPass2","Confirme le mot de passe",{type:"password",autocomplete:"new-password",minlength:"8",required:true}),
+        showPwToggle(["rPass","rPass2"]),msg,
+        h("button",{class:"btn primary wide",type:"submit",id:"aSubmit"},"Enregistrer le mot de passe")));
+    return;
+  }
+  if(state.uid){
+    box.replaceChildren(
+      h("div",{},h("h1",{id:"t-account"},"Mon compte"),h("p",{class:"lead",id:"accEmail"},state.email)),
+      state.isAdmin?h("div",{class:"chips"},h("span",{class:"chip paid"},"Gérant du club")):null,
+      h("form",{class:"panel",id:"profileForm",novalidate:true,onsubmit:onProfile},
+        h("h2",{},"Mes informations"),
+        h("p",{class:"small-note"},"Préremplies à chaque réservation pour que le club te retrouve."),
+        field("pfName","Nom et prénom",{autocomplete:"name",maxlength:"60",value:state.myName}),
+        field("pfPhone","Téléphone",{type:"tel",autocomplete:"tel",maxlength:"20",value:state.myPhone,placeholder:"06 12 34 56 78"}),
+        msg,h("button",{class:"btn court",type:"submit",id:"aSubmit"},"Enregistrer")),
+      h("button",{type:"button",class:"btn danger wide",id:"logoutBtn",onclick:onLogout},"Se déconnecter"));
+    return;
+  }
+  const up=a.mode==="signup",forgot=a.mode==="forgot";
+  const seg=h("div",{class:"seg",role:"group","aria-label":"Connexion ou inscription"},
+    h("button",{type:"button",id:"modeIn","aria-pressed":String(a.mode==="signin"),onclick:()=>{a.mode="signin";a.msg="";renderAccount()}},"Se connecter"),
+    h("button",{type:"button",id:"modeUp","aria-pressed":String(up),onclick:()=>{a.mode="signup";a.msg="";renderAccount()}},"Créer un compte"));
+  let form;
+  if(forgot){
+    form=h("form",{class:"panel",id:"authForm",novalidate:true,onsubmit:onForgot},
+      h("h2",{},"Mot de passe oublié"),
+      h("p",{class:"small-note"},"Indique ton email : tu recevras un lien pour choisir un nouveau mot de passe."),
+      field("aEmail","Email",{type:"email",autocomplete:"email",inputmode:"email",required:true}),msg,
+      h("button",{class:"btn court wide",type:"submit",id:"aSubmit"},"Recevoir le lien"),
+      h("button",{type:"button",class:"link",onclick:()=>{a.mode="signin";a.msg="";renderAccount()}},"Retour à la connexion"));
+  }else if(up){
+    form=h("form",{class:"panel",id:"authForm",novalidate:true,onsubmit:onSignUp},
+      field("aName","Nom et prénom",{autocomplete:"name",maxlength:"60",required:true,placeholder:"Ex. Yassine Benali"}),
+      field("aPhone","Téléphone (facultatif)",{type:"tel",autocomplete:"tel",maxlength:"20",placeholder:"06 12 34 56 78"}),
+      field("aEmail","Email (ton identifiant)",{type:"email",autocomplete:"email",inputmode:"email",required:true}),
+      field("aPass","Mot de passe (8 caractères minimum)",{type:"password",autocomplete:"new-password",minlength:"8",required:true}),
+      field("aPass2","Confirme le mot de passe",{type:"password",autocomplete:"new-password",minlength:"8",required:true}),
+      showPwToggle(["aPass","aPass2"]),msg,
+      h("button",{class:"btn primary wide",type:"submit",id:"aSubmit"},"Créer mon compte"));
+  }else{
+    form=h("form",{class:"panel",id:"authForm",novalidate:true,onsubmit:onSignIn},
+      field("aEmail","Email",{type:"email",autocomplete:"username",inputmode:"email",required:true}),
+      field("aPass","Mot de passe",{type:"password",autocomplete:"current-password",required:true}),
+      showPwToggle(["aPass"]),msg,
+      h("button",{class:"btn primary wide",type:"submit",id:"aSubmit"},"Se connecter"),
+      h("button",{type:"button",class:"link",id:"forgotLink",onclick:()=>{a.mode="forgot";a.msg="";renderAccount()}},"Mot de passe oublié ?"));
+  }
+  box.replaceChildren(
+    h("div",{},h("h1",{id:"t-account"},forgot?"Connexion":up?"Crée ton compte":"Connexion"),
+      h("p",{class:"lead"},up?"Un compte suffit pour réserver et retrouver tes matchs sur tous tes appareils.":"Connecte-toi pour réserver un terrain et suivre tes matchs.")),
+    forgot?null:seg,form);
+  if(a.msg)setAuthMsg(a.msg,a.msgBad);
+}
+async function onSignIn(e){
+  e.preventDefault();
+  const email=$("#aEmail").value.trim(),pw=$("#aPass").value;
+  if(!emailOk(email)||!pw){setAuthMsg("Indique ton email et ton mot de passe.",true);return}
+  authBusy(true,"Connexion…");
+  try{await store.signIn(email,pw);reloadSoon()}catch(err){setAuthMsg(authErr(err),true);authBusy(false,"Se connecter")}
+}
+async function onSignUp(e){
+  e.preventDefault();
+  const name=$("#aName").value.trim(),phone=$("#aPhone").value.trim(),email=$("#aEmail").value.trim(),pw=$("#aPass").value,pw2=$("#aPass2").value;
+  if(!name){setAuthMsg("Indique ton nom : le club en a besoin pour tes réservations.",true);$("#aName").focus();return}
+  if(!emailOk(email)){setAuthMsg("Adresse email invalide.",true);$("#aEmail").focus();return}
+  if(pw.length<8){setAuthMsg("Mot de passe trop court : 8 caractères minimum.",true);$("#aPass").focus();return}
+  if(pw!==pw2){setAuthMsg("Les deux mots de passe ne sont pas identiques.",true);$("#aPass2").focus();return}
+  authBusy(true,"Création…");
+  try{
+    const r=await store.signUp(email,pw,name,phone);
+    if(r&&r.session){reloadSoon();return}
+    state.auth={mode:"signin",msg:"Compte créé ! Ouvre l'email de confirmation envoyé à "+email+" (pense aux spams), puis connecte-toi.",msgBad:false};
+    renderAccount();
+  }catch(err){setAuthMsg(authErr(err),true);authBusy(false,"Créer mon compte")}
+}
+async function onForgot(e){
+  e.preventDefault();
+  const email=$("#aEmail").value.trim();
+  if(!emailOk(email)){setAuthMsg("Adresse email invalide.",true);return}
+  authBusy(true,"Envoi…");
+  try{await store.resetPassword(email);setAuthMsg("Si un compte existe pour cette adresse, un lien vient d'être envoyé. Pense à vérifier les spams.",false)}
+  catch(err){setAuthMsg(authErr(err),true)}
+  authBusy(false,"Recevoir le lien");
+}
+async function onRecovery(e){
+  e.preventDefault();
+  const pw=$("#rPass").value,pw2=$("#rPass2").value;
+  if(pw.length<8){setAuthMsg("Mot de passe trop court : 8 caractères minimum.",true);return}
+  if(pw!==pw2){setAuthMsg("Les deux mots de passe ne sont pas identiques.",true);return}
+  authBusy(true,"Enregistrement…");
+  try{
+    await store.updatePassword(pw);
+    try{history.replaceState(null,"",location.pathname+location.search)}catch(_){}
+    toast("Mot de passe modifié. Tu es connecté.");reloadSoon();
+  }catch(err){setAuthMsg(authErr(err),true);authBusy(false,"Enregistrer le mot de passe")}
+}
+async function onProfile(e){
+  e.preventDefault();
+  const name=$("#pfName").value.trim(),phone=$("#pfPhone").value.trim();
+  if(!name){setAuthMsg("Le nom ne peut pas être vide.",true);return}
+  authBusy(true,"Enregistrement…");
+  try{await store.updateProfile(name,phone);state.myName=name;state.myPhone=phone;setAuthMsg("Informations enregistrées.",false)}
+  catch(err){setAuthMsg(errMsg(err),true)}
+  authBusy(false,"Enregistrer");
+}
+async function onLogout(){
+  const b=$("#logoutBtn");if(b){b.disabled=true;b.textContent="Déconnexion…"}
+  try{await store.signOut()}catch(_){}
+  reloadSoon();
+}
+
 /* ---------- Disponibilités ---------- */
 function cellState(courtId,k,start,dur,now){
   if(start+dur>CLUB.close)return"none";
@@ -526,7 +793,10 @@ function renderGrid(){
 
 /* ---------- Feuille de récap ---------- */
 function openSheet(sel){
-  if(!state.canBook){toast(readOnlyText(),true);return}
+  if(!state.canBook){
+    if(state.authEnabled&&!state.uid){state.auth.mode="signin";state.auth.msg="Connecte-toi ou crée un compte pour réserver ce créneau.";state.auth.msgBad=false;setView("account");return}
+    toast(readOnlyText(),true);return;
+  }
   state.sheet={...sel,players:4,payment:"sur_place",busy:false,error:""};
   renderSheet();
 }
@@ -535,7 +805,7 @@ function renderSheet(){
   const s=state.sheet;if(!s)return;
   const wrap=$("#sheetWrap");
   const prevName=$("#sName")?$("#sName").value:(state.myName||"");
-  const prevPhone=$("#sPhone")?$("#sPhone").value:"";
+  const prevPhone=$("#sPhone")?$("#sPhone").value:(state.myPhone||"");
   const c=courtById(s.courtId),total=priceOf(s.date,s.start,s.dur),each=perPlayer(total,s.players);
   const tariff=tariffOf(s.date,s.start);
   const start=startDate(s.date,s.start);
@@ -591,8 +861,8 @@ async function confirmBooking(){
   const cells=[];for(let m=s.start;m<s.start+s.dur;m+=30)cells.push({key:slotKey(s.courtId,s.date,m),time:hhmm(m)});
   s.busy=true;s.error="";renderSheet();
   try{
-    await store.createBooking(b,cells);
-    state.lastBooking=b;closeSheet();setView("ticket");
+    const saved=await store.createBooking(b,cells);
+    state.lastBooking=saved||b;closeSheet();setView("ticket");
   }catch(e){
     s.busy=false;s.error=errMsg(e);renderSheet();
   }
@@ -776,12 +1046,15 @@ function fillPriceForm(){
 function setView(v){
   if(v==="club"&&!state.isAdmin)v="book";
   state.view=v;state.confirmCancel=null;
-  for(const id of["book","ticket","mine","club"])$("#view-"+id).hidden=id!==v;
+  if(v==="account"&&!state.authEnabled)v="book";
+  for(const id of["book","ticket","mine","club","account"])$("#view-"+id).hidden=id!==v;
   for(const t of document.querySelectorAll(".tab")){const on=t.dataset.view===v||(v==="ticket"&&t.dataset.view==="book");if(on)t.setAttribute("aria-current","page");else t.removeAttribute("aria-current")}
+  renderChrome();
   if(v==="book")renderBook();
   if(v==="ticket")renderTicket();
   if(v==="mine")renderMine();
   if(v==="club"){renderClub();refreshAdmin()}
+  if(v==="account")renderAccount();
   window.scrollTo(0,0);
 }
 function readOnlyText(){
@@ -791,12 +1064,18 @@ function readOnlyText(){
 function renderChrome(){
   const pill=$("#modePill");
   if(state.mode==="demo"){pill.textContent="Démo";pill.className="pill demo"}
-  else if(state.mode==="db"){pill.textContent="En direct";pill.className="pill"}
+  else if(state.mode==="db"||state.mode==="supabase"){pill.textContent="En direct";pill.className="pill"}
   else{pill.textContent="Connexion…";pill.className="pill"}
   const n=$("#notices");n.replaceChildren();
-  if(state.mode==="demo")n.append(h("div",{class:"notice warn",id:"demoNotice"},"Mode démo : les réservations restent dans cet onglet et ne sont pas partagées."));
+  if(state.mode==="demo")n.append(h("div",{class:"notice warn",id:"demoNotice"},state.offline
+    ?"Serveur injoignable : mode démo. Les réservations restent dans cet onglet et ne sont pas partagées."
+    :"Mode démo : les réservations restent dans cet onglet et ne sont pas partagées."));
+  else if(state.mode==="supabase"&&!state.uid&&state.view!=="account")n.append(h("div",{class:"notice row",id:"loginNotice"},
+    h("span",{},"Connecte-toi ou crée un compte pour réserver."),
+    h("button",{type:"button",class:"btn small court",onclick:()=>{state.auth.mode="signin";state.auth.msg="";setView("account")}},"Se connecter")));
   else if(state.mode==="db"&&!state.canBook)n.append(h("div",{class:"notice",id:"roNotice"},readOnlyText()));
   $("#tabClub").hidden=!state.isAdmin;
+  $("#tabAccount").hidden=!state.authEnabled;
   const up=upcomingMine().length,badge=$("#mineBadge");badge.hidden=!up;badge.textContent=up;
 }
 function rerenderActive(){
@@ -824,8 +1103,15 @@ async function init(){
   if(cl&&typeof cl.use==="function"){
     try{[db,user]=await Promise.all([cl.use("db"),cl.use("user")])}catch(e){db=null}
   }
-  try{store=db?await makeDbStore(db,user):makeDemoStore()}catch(e){store=makeDemoStore()}
+  const wantsServer=!db&&SUPABASE_URL&&SUPABASE_ANON_KEY;
+  try{
+    if(db)store=await makeDbStore(db,user);
+    else if(wantsServer&&window.supabase)store=await makeSupabaseStore();
+    else{store=makeDemoStore();state.offline=!!wantsServer}
+  }catch(e){store=makeDemoStore();state.offline=!!wantsServer}
   state.mode=store.mode;state.uid=store.uid;state.isAdmin=store.isAdmin;state.canBook=store.canBook;state.myName=store.myName;
+  state.myPhone=store.myPhone||"";state.email=store.email||"";state.authEnabled=store.mode==="supabase";
+  if(state.authEnabled&&state.auth.mode==="recovery")setView("account");
   store.onConfig(cfg=>{
     const p=cfg&&cfg.prices;state.prices={...DEFAULT_PRICES,...(p||{})};fillPriceForm();
     if(state.view==="book")renderBook();if(state.sheet&&!state.sheet.busy)renderSheet();
