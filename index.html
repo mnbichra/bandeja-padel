@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Bandeja Padel</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout : app téléphone à une colonne — en-tête collant, bandeau de dates, grille heures × terrains, barre d'onglets fixe en bas */
+:root{
+  --bg:#F5F7F1; --surface:#FFFFFF; --surface-2:#ECF0E7; --fg:#0F1A14; --muted:#56635B; --line:#D7DDD2;
+  --court:#0B6E4F; --on-court:#FFFFFF; --court-soft:#DFF0E6; --court-ink:#0A5A41;
+  --ball:#D7F032; --ball-ink:#18230A;
+  --clay:#B5432A; --clay-soft:#F7E4DD;
+  --off:#E3E6DF; --off-ink:#848C86; --stripe:#D3D8CF;
+  --font-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --font-body:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --hdr:58px; --r:12px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C1410; --surface:#141F19; --surface-2:#1B2922; --fg:#E8EFE9; --muted:#9BA8A0; --line:#28382F;
+    --court:#41B98B; --on-court:#04140C; --court-soft:#16342A; --court-ink:#7FD8B2;
+    --ball:#D7F032; --ball-ink:#18230A;
+    --clay:#F08B6D; --clay-soft:#3A1F18;
+    --off:#1C2621; --off-ink:#66736B; --stripe:#232F29;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C1410; --surface:#141F19; --surface-2:#1B2922; --fg:#E8EFE9; --muted:#9BA8A0; --line:#28382F;
+  --court:#41B98B; --on-court:#04140C; --court-soft:#16342A; --court-ink:#7FD8B2;
+  --ball:#D7F032; --ball-ink:#18230A;
+  --clay:#F08B6D; --clay-soft:#3A1F18;
+  --off:#1C2621; --off-ink:#66736B; --stripe:#232F29;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--court);outline-offset:2px;border-radius:6px}
+.num{font-variant-numeric:tabular-nums}
+
+.app{max-width:620px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(96px + env(safe-area-inset-bottom,0px))}
+
+/* En-tête */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;height:var(--hdr);display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--bg);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0}
+.logo{font-family:var(--font-display);font-weight:800;font-size:30px;letter-spacing:.02em;line-height:1;display:flex;align-items:center;gap:6px}
+.logo i{display:inline-block;width:13px;height:13px;border-radius:50%;background:var(--ball);box-shadow:inset -2px -2px 0 rgba(0,0,0,.12);transform:translateY(-2px)}
+.club{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.pill.demo{background:var(--ball);color:var(--ball-ink)}
+
+/* Bandeaux */
+.notice{margin-top:12px;padding:10px 12px;border-radius:var(--r);font-size:14px;background:var(--surface-2);color:var(--fg);border:1px solid var(--line)}
+.notice.warn{background:var(--clay-soft);border-color:transparent}
+
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;line-height:1.05}
+h1{font-size:34px;font-weight:800;letter-spacing:.01em}
+h2{font-size:24px;font-weight:700}
+.lead{color:var(--muted);margin:4px 0 0;font-size:15px}
+.section{display:flex;flex-direction:column;gap:14px;padding-top:18px}
+.label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* Dates */
+.dates{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin:0 -2px;scrollbar-width:none}
+.dates::-webkit-scrollbar{display:none}
+.day{flex:0 0 auto;width:58px;display:flex;flex-direction:column;align-items:center;gap:0;padding:8px 0 7px;border-radius:14px;border:1px solid var(--line);background:var(--surface)}
+.day small{font-size:12px;color:var(--muted);text-transform:capitalize}
+.day b{font-family:var(--font-display);font-size:26px;line-height:1.05;font-weight:700}
+.day[aria-pressed="true"]{background:var(--court);border-color:var(--court);color:var(--on-court)}
+.day[aria-pressed="true"] small{color:var(--on-court);opacity:.85}
+
+/* Contrôles segmentés */
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;padding:3px;border-radius:12px;background:var(--surface-2);gap:2px}
+.seg button{border:0;background:transparent;padding:8px 12px;border-radius:9px;font-size:14px;font-weight:600;color:var(--muted);min-height:40px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.hint{font-size:13px;color:var(--muted);margin:0}
+
+/* Grille */
+.grid{display:flex;flex-direction:column;gap:4px}
+.g-row{display:grid;grid-template-columns:3rem repeat(var(--cols,5),minmax(0,1fr));gap:4px;align-items:stretch}
+.g-head{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--hdr));z-index:3;background:var(--bg);padding:8px 0 6px}
+.g-court{display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;min-width:0}
+.g-court strong{font-family:var(--font-display);font-size:17px;font-weight:700;line-height:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:10px;font-weight:700;letter-spacing:.07em;padding:2px 5px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+.tag.in{border-style:solid}
+.tag.out{border-style:dashed}
+.g-time{font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--muted);display:flex;align-items:center;font-variant-numeric:tabular-nums}
+.g-row.hour .g-time{color:var(--fg);font-weight:700}
+.cell{min-height:46px;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1;font-size:12px;border:1px solid transparent;padding:0}
+button.cell{background:var(--court-soft);border-color:color-mix(in srgb,var(--court) 30%,transparent);color:var(--court-ink)}
+button.cell:hover{background:var(--court);color:var(--on-court)}
+button.cell b{font-family:var(--font-display);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+button.cell small{font-size:10px;font-weight:600;opacity:.8;margin-top:1px}
+.cell.taken{background:repeating-linear-gradient(135deg,var(--off) 0 6px,var(--stripe) 6px 12px);color:var(--off-ink);font-weight:600}
+.cell.blocked{background:var(--off);color:var(--off-ink);font-weight:600;border:1px dashed var(--stripe)}
+.cell.short{background:var(--off);color:var(--off-ink)}
+.cell.mine{background:var(--ball);color:var(--ball-ink);font-weight:800;font-size:12px}
+.empty{padding:22px 16px;border:1px dashed var(--line);border-radius:var(--r);text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:12px;align-items:center}
+.empty strong{color:var(--fg);font-size:17px}
+.row-btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+
+/* Boutons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:15px;text-decoration:none;color:var(--fg)}
+.btn.primary{background:var(--ball);border-color:var(--ball);color:var(--ball-ink)}
+.btn.court{background:var(--court);border-color:var(--court);color:var(--on-court)}
+.btn.danger{color:var(--clay);border-color:color-mix(in srgb,var(--clay) 45%,transparent)}
+.btn.small{min-height:40px;padding:0 12px;font-size:14px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.wide{width:100%}
+
+/* Feuille de récap */
+.backdrop{position:fixed;inset:0;background:rgba(5,12,8,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:620px;max-height:92vh;overflow:auto;background:var(--surface);border-radius:20px 20px 0 0;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:16px;animation:up .22s ease-out}
+@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+.grab{width:42px;height:5px;border-radius:9px;background:var(--line);align-self:center;margin-top:-6px}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:15px}
+.meta b{color:var(--fg);font-weight:600}
+.price{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:14px;border-radius:var(--r);background:var(--surface-2)}
+.price .big{font-family:var(--font-display);font-size:44px;font-weight:800;line-height:.9;font-variant-numeric:tabular-nums}
+.price .big small{font-size:18px;font-weight:700;margin-left:4px}
+.price p{margin:0;font-size:13px;color:var(--muted);text-align:right}
+.field{display:flex;flex-direction:column;gap:6px}
+.field input,.field select{min-height:48px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:16px;width:100%}
+.radio{display:flex;flex-direction:column;gap:8px}
+.radio label{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:10px;font-size:15px}
+.radio input{width:20px;height:20px;accent-color:var(--court)}
+.policy{font-size:14px;padding:12px;border-radius:10px;border-left:4px solid var(--court);background:var(--court-soft);color:var(--fg)}
+.policy.late{border-left-color:var(--clay);background:var(--clay-soft)}
+.err{color:var(--clay);font-weight:600;font-size:14px;margin:0}
+.actions{display:flex;gap:10px}
+.actions .btn{flex:1}
+
+/* Billet */
+.ticket{background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.ticket-top{background:var(--court);color:var(--on-court);padding:18px;display:flex;flex-direction:column;gap:4px}
+.ticket-top h1{font-size:32px}
+.ticket-body{padding:18px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;border-bottom:2px dashed var(--line)}
+.code{font-family:var(--font-display);font-size:40px;font-weight:800;letter-spacing:.06em;line-height:1}
+.qr{background:#FFFFFF;padding:8px;border-radius:10px;width:148px;height:148px;display:flex;align-items:center;justify-content:center}
+.qr img,.qr canvas{display:block;width:132px;height:132px}
+.ticket-list{padding:14px 18px;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px;margin:0}
+.ticket-list dt{color:var(--muted)}
+.ticket-list dd{margin:0;font-weight:600;text-align:right}
+.stack{display:flex;flex-direction:column;gap:10px}
+.msg{white-space:pre-wrap;font-size:13px;background:var(--surface-2);padding:10px 12px;border-radius:10px;margin:0;user-select:all;font-family:var(--font-body)}
+
+/* Cartes réservations */
+.cards{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.card-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.card-head h3{font-size:22px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted)}
+.chip.ok{background:var(--court-soft);color:var(--court-ink)}
+.chip.paid{background:var(--ball);color:var(--ball-ink)}
+.chip.cancel{background:var(--clay-soft);color:var(--clay)}
+.card .row-btns{justify-content:flex-start}
+.small-note{font-size:13px;color:var(--muted);margin:0}
+
+/* Club */
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-family:var(--font-display);font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{font-size:12px;color:var(--muted)}
+.plan{display:flex;flex-direction:column;gap:8px}
+.plan-item{display:grid;grid-template-columns:4.2rem 1fr;gap:10px;padding:12px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+.plan-item.block{border-style:dashed;background:var(--surface-2)}
+.plan-time{font-family:var(--font-display);font-weight:700;font-size:20px;line-height:1;font-variant-numeric:tabular-nums}
+.plan-time small{display:block;font-size:14px;color:var(--muted);font-weight:600;margin-top:2px}
+.plan-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.plan-main p{margin:0;font-size:14px;color:var(--muted);overflow-wrap:anywhere}
+.plan-main strong{font-size:15px}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.form-grid .full{grid-column:1/-1}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px}
+
+/* Onglets bas */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--surface);border-top:1px solid var(--line);padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.tabs-in{max-width:620px;margin:0 auto;display:flex;gap:6px}
+.tab{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;min-height:52px;border-radius:12px;font-size:12px;font-weight:700;color:var(--muted)}
+.tab svg{width:24px;height:24px}
+.tab[aria-current="page"]{color:var(--court);background:var(--court-soft)}
+.badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--ball);color:var(--ball-ink);font-size:11px;display:inline-flex;align-items:center;justify-content:center;margin-left:4px}
+
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:30;max-width:min(92vw,520px);background:var(--fg);color:var(--bg);padding:12px 16px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.toast.bad{background:var(--clay);color:#FFFFFF}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+@media (max-width:380px){
+  .g-row{grid-template-columns:2.6rem repeat(var(--cols,5),minmax(0,1fr));gap:3px}
+  button.cell b{font-size:17px}
+  .g-court strong{font-size:15px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="logo">BANDEJA<i aria-hidden="true"></i></div>
+      <div class="club" id="clubName">Atlas Padel Club · Casablanca</div>
+    </div>
+    <span class="pill" id="modePill">Connexion…</span>
+  </header>
+
+  <div id="notices"></div>
+
+  <main>
+    <section class="section" id="view-book" aria-labelledby="t-book">
+      <div>
+        <h1 id="t-book">Réserve ton terrain</h1>
+        <p class="lead">Choisis un jour, une durée, puis touche un créneau libre.</p>
+      </div>
+      <div class="dates" id="dates" role="group" aria-label="Jour"></div>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Durée" id="durSeg">
+          <button type="button" data-dur="90" id="dur90">90 min</button>
+          <button type="button" data-dur="60" id="dur60">60 min</button>
+        </div>
+        <div class="seg" role="group" aria-label="Type de terrain" id="filterSeg">
+          <button type="button" data-f="all" id="fAll">Tous</button>
+          <button type="button" data-f="in" id="fIn">Intérieur</button>
+          <button type="button" data-f="out" id="fOut">Extérieur</button>
+        </div>
+      </div>
+      <p class="hint" id="priceHint"></p>
+      <div class="grid" id="grid" aria-live="polite"></div>
+    </section>
+
+    <section class="section" id="view-ticket" hidden aria-labelledby="t-ticket"></section>
+
+    <section class="section" id="view-mine" hidden aria-labelledby="t-mine">
+      <div>
+        <h1 id="t-mine">Mes réservations</h1>
+        <p class="lead">Annulation gratuite jusqu'à 24 h avant le match.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Période" id="mineSeg">
+        <button type="button" data-p="next" id="pNext">À venir</button>
+        <button type="button" data-p="past" id="pPast">Passées et annulées</button>
+      </div>
+      <div class="cards" id="mineList"></div>
+    </section>
+
+    <section class="section" id="view-club" hidden aria-labelledby="t-club">
+      <div>
+        <h1 id="t-club">Espace club</h1>
+        <p class="lead">Planning du jour, blocages de terrain et tarifs. Visible seulement par les gérants.</p>
+      </div>
+      <div class="dates" id="adminDates" role="group" aria-label="Jour du planning"></div>
+      <div class="stats" id="adminStats"></div>
+      <div class="plan" id="adminPlan"></div>
+
+      <form class="panel" id="blockForm" novalidate>
+        <h2>Bloquer un terrain</h2>
+        <p class="small-note">Entretien, cours, tournoi : la plage devient indisponible pour tout le monde.</p>
+        <div class="form-grid">
+          <div class="field full"><label class="label" for="bCourt">Terrain</label><select id="bCourt"></select></div>
+          <div class="field"><label class="label" for="bStart">De</label><select id="bStart"></select></div>
+          <div class="field"><label class="label" for="bEnd">À</label><select id="bEnd"></select></div>
+          <div class="field full"><label class="label" for="bReason">Motif</label><input id="bReason" maxlength="60" placeholder="Cours collectif, entretien…"></div>
+        </div>
+        <p class="err" id="bErr" hidden></p>
+        <button class="btn court" type="submit" id="bSubmit">Bloquer cette plage</button>
+      </form>
+
+      <form class="panel" id="priceForm" novalidate>
+        <h2>Tarifs par terrain</h2>
+        <p class="small-note">Heures creuses : du lundi au vendredi, début avant 17 h. Le reste est en heures pleines.</p>
+        <div class="form-grid">
+          <div class="field"><label class="label" for="pc60">Creuse · 60 min</label><input id="pc60" type="number" inputmode="numeric" min="0" step="10"></div>
+          <div class="field"><label class="label" for="pc90">Creuse · 90 min</label><input id="pc90" type="number" inputmode="numeric" min="0" step="10"></div>
+          <div class="field"><label class="label" for="pp60">Pleine · 60 min</label><input id="pp60" type="number" inputmode="numeric" min="0" step="10"></div>
+          <div class="field"><label class="label" for="pp90">Pleine · 90 min</label><input id="pp90" type="number" inputmode="numeric" min="0" step="10"></div>
+        </div>
+        <p class="err" id="pErr" hidden></p>
+        <button class="btn court" type="submit" id="pSubmit">Enregistrer les tarifs</button>
+      </form>
+    </section>
+  </main>
+</div>
+
+<nav class="tabs" aria-label="Navigation">
+  <div class="tabs-in">
+    <button class="tab" type="button" data-view="book" id="tabBook">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>
+      Réserver
+    </button>
+    <button class="tab" type="button" data-view="mine" id="tabMine">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M14 6v12" stroke-dasharray="2 2"/></svg>
+      <span>Mes résas<span class="badge num" id="mineBadge" hidden></span></span>
+    </button>
+    <button class="tab" type="button" data-view="club" id="tabClub" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg>
+      Club
+    </button>
+  </div>
+</nav>
+
+<div class="backdrop" id="sheetWrap" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------- Données de référence ---------- */
+const CLUB={name:"Atlas Padel Club",city:"Casablanca",open:8*60,close:24*60,peakStart:17*60};
+const COURTS=[
+  {id:"T1",name:"Anfa",indoor:true,kind:"panoramique"},
+  {id:"T2",name:"Majorelle",indoor:true,kind:"vitré"},
+  {id:"T3",name:"Océan",indoor:false,kind:"vitré"},
+  {id:"T4",name:"Atlas",indoor:false,kind:"vitré"},
+  {id:"T5",name:"Sahara",indoor:false,kind:"panoramique"}
+];
+const DEFAULT_PRICES={creuse60:200,creuse90:300,pleine60:280,pleine90:400};
+const MAX_UPCOMING=3, CANCEL_HOURS=24, DAYS_AHEAD=7;
+
+/* ---------- Utilitaires date / prix ---------- */
+const pad=n=>String(n).padStart(2,"0");
+const dateKey=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const parseKey=k=>{const[y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d)};
+const todayKey=()=>dateKey(new Date());
+const addDays=(k,n)=>{const d=parseKey(k);d.setDate(d.getDate()+n);return dateKey(d)};
+const hhmm=min=>pad(Math.floor(min/60)%24)+":"+pad(min%60);
+const toMin=s=>{const[h,m]=s.split(":").map(Number);return h*60+m};
+const startDate=(k,min)=>{const d=parseKey(k);d.setMinutes(min);return d};
+const slotKey=(c,k,min)=>c+"_"+k.replace(/-/g,"")+"_"+pad(Math.floor(min/60))+pad(min%60);
+function slotKeys(c,k,start,dur){const a=[];for(let m=start;m<start+dur;m+=30)a.push(slotKey(c,k,m));return a}
+function tariffOf(k,min){const dow=parseKey(k).getDay();return(dow===0||dow===6||min>=CLUB.peakStart)?"pleine":"creuse"}
+function priceOf(k,min,dur){return Number(state.prices[tariffOf(k,min)+dur])||0}
+const perPlayer=(total,p)=>Math.ceil(total/p);
+const DOW=["dim.","lun.","mar.","mer.","jeu.","ven.","sam."];
+const MON=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+const fmtDate=k=>{const d=parseKey(k);return DOW[d.getDay()]+" "+d.getDate()+" "+MON[d.getMonth()]};
+const courtById=id=>COURTS.find(c=>c.id===id);
+const courtLabel=c=>c.name+" · "+(c.indoor?"intérieur":"extérieur")+" "+c.kind;
+const rid=(n=12)=>{const a="abcdefghijkmnpqrstuvwxyz23456789";const b=new Uint8Array(n);crypto.getRandomValues(b);return Array.from(b,x=>a[x%a.length]).join("")};
+const newCode=()=>"BDJ-"+rid(4).toUpperCase();
+const bookingStart=b=>startDate(b.date,toMin(b.start));
+const canCancel=(b,now=new Date())=>b.status==="confirmed"&&(bookingStart(b)-now)>CANCEL_HOURS*3600e3;
+
+/* ---------- État ---------- */
+const state={
+  view:"book",date:todayKey(),dur:90,filter:"all",period:"next",
+  slots:new Map(),mine:[],mineIds:new Set(),prices:{...DEFAULT_PRICES},
+  adminDate:todayKey(),adminBookings:[],sheet:null,lastBooking:null,confirmCancel:null,
+  mode:"loading",uid:null,isAdmin:false,canBook:false,myName:""
+};
+let store=null;
+
+/* ---------- DOM helper ---------- */
+const $=s=>document.querySelector(s);
+function h(tag,attrs,...kids){
+  const el=document.createElement(tag);
+  if(attrs)for(const[k,v]of Object.entries(attrs)){
+    if(v==null||v===false)continue;
+    if(k.startsWith("on"))el.addEventListener(k.slice(2),v);
+    else if(k==="class")el.className=v;
+    else el.setAttribute(k,v===true?"":v);
+  }
+  for(const c of kids.flat()){if(c==null||c===false)continue;el.append(c.nodeType?c:document.createTextNode(String(c)))}
+  return el;
+}
+let toastTimer;
+function toast(msg,bad){const t=$("#toast");t.textContent=msg;t.className="toast"+(bad?" bad":"");t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,bad?6000:3500)}
+function errMsg(e){
+  const c=e&&e.code;
+  if(c==="conflict")return"Ce créneau vient d'être pris. La grille est à jour : choisis-en un autre.";
+  if(c==="limit")return"Tu as déjà "+MAX_UPCOMING+" réservations à venir. Annule-en une pour réserver à nouveau.";
+  if(c==="invalid_argument")return"Ton accès ne permet pas d'enregistrer. Demande au club un accès Contributeur à cette page.";
+  if(c==="quota_exceeded")return"La base de réservations est pleine. Préviens le club.";
+  if(c==="revoked"||c==="not_granted")return"L'accès à la base a été retiré. Recharge la page.";
+  return"Connexion instable, l'action n'a pas été enregistrée. Réessaie.";
+}
+const conflict=()=>({code:"conflict"});
+
+/* ---------- Stockage : base partagée ---------- */
+async function makeDbStore(db,user){
+  const uid=user?await user.id():null;
+  const isAdmin=user?await user.canEdit():false;
+  const canWrite=user?await user.can("data.write"):null;
+  const me=user?await user.me():null;
+  const bPath=b=>"bookings/"+b.userId+"/items/"+b.id;
+  async function release(keys,refId){
+    await Promise.all(keys.map(async k=>{const r=db.doc("slots/"+k);const s=await r.get();if(s.exists&&s.data().refId===refId)await r.delete()}));
+  }
+  async function claim(cells,body,holder){
+    const refs=cells.map(c=>db.doc("slots/"+c.key));
+    let leased=true;
+    try{
+      for(const r of refs){const x=await r.acquire({holder,ttlMs:4000});if(!x.acquired)throw conflict()}
+    }catch(e){if(e&&e.code==="conflict")throw e;if(e&&e.code==="invalid_argument")throw e;leased=false}
+    const snaps=await Promise.all(refs.map(r=>r.get()));
+    if(snaps.some(s=>s.exists&&s.data()&&s.data().refId))throw conflict();
+    await Promise.all(refs.map((r,i)=>r.set({...body,key:cells[i].key,time:cells[i].time})));
+    const after=await Promise.all(refs.map(r=>r.get()));
+    if(after.some(s=>!s.exists||s.data().refId!==body.refId)){await release(cells.map(c=>c.key),body.refId);throw conflict()}
+    return leased;
+  }
+  return{
+    mode:"db",uid,isAdmin,canBook:!!uid&&canWrite!==false,myName:(me&&me.name)||"",
+    readOnly:!uid?"noid":(canWrite===false?"view":""),
+    onSlots(cb,err){return db.collection("slots").where("date",">=",todayKey()).onSnapshot(s=>cb(s.docs.map(d=>({...d.data(),key:d.id}))),err)},
+    onMine(cb,err){if(!uid){cb([]);return()=>{}}return db.collection("bookings/"+uid+"/items").onSnapshot(s=>cb(s.docs.map(d=>d.data())),err)},
+    onConfig(cb,err){return db.doc("config/club").onSnapshot(s=>cb(s.exists?s.data():null),err)},
+    async createBooking(b,cells){
+      await claim(cells,{type:"booking",refId:b.id,userId:b.userId,courtId:b.courtId,date:b.date},uid||b.id);
+      try{await db.doc(bPath(b)).set(b)}catch(e){await release(b.slotKeys,b.id).catch(()=>{});throw e}
+    },
+    async cancelBooking(b){await db.doc(bPath(b)).update({status:"cancelled",cancelledAt:new Date().toISOString()});await release(b.slotKeys,b.id)},
+    async markPaid(b,paid){await db.doc(bPath(b)).update({paid})},
+    async getBookings(refs){const snaps=await Promise.all(refs.map(r=>db.doc("bookings/"+r.userId+"/items/"+r.refId).get()));return snaps.filter(s=>s.exists).map(s=>s.data())},
+    async createBlock(blk,cells){await claim(cells,{type:"block",refId:blk.id,courtId:blk.courtId,date:blk.date,reason:blk.reason},uid||blk.id)},
+    async removeBlock(refId){const keys=[...state.slots.values()].filter(s=>s.refId===refId).map(s=>s.key);await release(keys,refId)},
+    async savePrices(p){await db.doc("config/club").set({prices:p,updatedAt:new Date().toISOString()})}
+  };
+}
+
+/* ---------- Stockage : mode démo (mémoire) ---------- */
+function makeDemoStore(){
+  const slots=new Map(),books=new Map();let config=null;
+  const L={slots:[],mine:[],config:[]};
+  const emit=()=>{L.slots.forEach(f=>f([...slots.values()]));L.mine.forEach(f=>f([...books.values()]));L.config.forEach(f=>f(config))};
+  const wait=()=>new Promise(r=>setTimeout(r,120));
+  function claim(cells,body){
+    if(cells.some(c=>slots.has(c.key)))throw conflict();
+    cells.forEach(c=>slots.set(c.key,{...body,key:c.key,time:c.time}));
+  }
+  const release=(keys,refId)=>keys.forEach(k=>{const s=slots.get(k);if(s&&s.refId===refId)slots.delete(k)});
+  return{
+    mode:"demo",uid:"demo",isAdmin:true,canBook:true,myName:"",readOnly:"",
+    onSlots(cb){L.slots.push(cb);cb([...slots.values()]);return()=>{}},
+    onMine(cb){L.mine.push(cb);cb([...books.values()]);return()=>{}},
+    onConfig(cb){L.config.push(cb);cb(config);return()=>{}},
+    async createBooking(b,cells){await wait();claim(cells,{type:"booking",refId:b.id,userId:b.userId,courtId:b.courtId,date:b.date});books.set(b.id,{...b});emit()},
+    async cancelBooking(b){await wait();const x=books.get(b.id);if(x){x.status="cancelled";x.cancelledAt=new Date().toISOString()}release(b.slotKeys,b.id);emit()},
+    async markPaid(b,paid){const x=books.get(b.id);if(x)x.paid=paid;emit()},
+    async getBookings(refs){return refs.map(r=>books.get(r.refId)).filter(Boolean).map(x=>({...x}))},
+    async createBlock(blk,cells){await wait();claim(cells,{type:"block",refId:blk.id,courtId:blk.courtId,date:blk.date,reason:blk.reason});emit()},
+    async removeBlock(refId){for(const[k,s]of[...slots])if(s.refId===refId)slots.delete(k);emit()},
+    async savePrices(p){config={prices:p};emit()}
+  };
+}
+
+/* ---------- Disponibilités ---------- */
+function cellState(courtId,k,start,dur,now){
+  if(start+dur>CLUB.close)return"none";
+  if(startDate(k,start)<=now)return"past";
+  const keys=slotKeys(courtId,k,start,dur);
+  const first=state.slots.get(keys[0]);
+  if(first){if(first.type==="block")return"blocked";return state.mineIds.has(first.refId)?"mine":"taken"}
+  for(const key of keys.slice(1))if(state.slots.has(key))return"short";
+  return"free";
+}
+function upcomingMine(now=new Date()){return state.mine.filter(b=>b.status==="confirmed"&&bookingStart(b)>now)}
+
+/* ---------- Rendu : dates ---------- */
+function renderDates(el,current,onPick){
+  el.replaceChildren(...Array.from({length:DAYS_AHEAD+1},(_,i)=>{
+    const k=addDays(todayKey(),i),d=parseKey(k);
+    return h("button",{type:"button",class:"day","aria-pressed":String(k===current),"aria-label":fmtDate(k),onclick:()=>onPick(k)},
+      h("small",{},i===0?"Auj.":DOW[d.getDay()].replace(".","")),h("b",{class:"num"},d.getDate()),h("small",{},MON[d.getMonth()]));
+  }));
+}
+
+/* ---------- Rendu : vue Réserver ---------- */
+function renderBook(){
+  renderDates($("#dates"),state.date,k=>{state.date=k;renderBook()});
+  for(const b of document.querySelectorAll("#durSeg button"))b.setAttribute("aria-pressed",String(Number(b.dataset.dur)===state.dur));
+  for(const b of document.querySelectorAll("#filterSeg button"))b.setAttribute("aria-pressed",String(b.dataset.f===state.filter));
+  const p=state.prices,d=state.dur;
+  $("#priceHint").textContent="Prix affiché par joueur (4 joueurs). Terrain "+d+" min : "+p["creuse"+d]+" MAD en heures creuses, "+p["pleine"+d]+" MAD en heures pleines. Aucun frais en plus.";
+  renderGrid();
+}
+function renderGrid(){
+  const el=$("#grid");el.replaceChildren();
+  if(state.mode==="loading"){el.append(h("div",{class:"empty"},h("strong",{},"Chargement des créneaux…")));return}
+  const courts=COURTS.filter(c=>state.filter==="all"||(state.filter==="in"?c.indoor:!c.indoor));
+  el.style.setProperty("--cols",courts.length);
+  const now=new Date(),isToday=state.date===todayKey();
+  const rows=[];let free=0,hidden=0;
+  for(let m=CLUB.open;m+state.dur<=CLUB.close;m+=30){
+    if(isToday&&startDate(state.date,m)<=now){hidden++;continue}
+    const cells=courts.map(c=>{
+      const st=cellState(c.id,state.date,m,state.dur,now);
+      if(st==="free"){
+        free++;
+        const total=priceOf(state.date,m,state.dur);
+        return h("button",{type:"button",class:"cell","data-court":c.id,"data-start":hhmm(m),
+          "aria-label":c.name+", "+hhmm(m)+", "+state.dur+" min, "+total+" MAD le terrain, libre",
+          onclick:()=>openSheet({courtId:c.id,date:state.date,start:m,dur:state.dur})},
+          h("b",{},perPlayer(total,4)),h("small",{},"MAD/j"));
+      }
+      const txt={taken:"Pris",blocked:"Fermé",mine:"À toi",short:"—",past:"—",none:""}[st];
+      const lab={taken:"réservé",blocked:"fermé par le club",mine:"ta réservation",short:"trop court avant le créneau suivant",past:"passé",none:""}[st];
+      return h("div",{class:"cell "+st,"data-court":c.id,"data-start":hhmm(m),"aria-label":c.name+", "+hhmm(m)+", "+lab},txt);
+    });
+    rows.push(h("div",{class:"g-row"+(m%60===0?" hour":"")},h("div",{class:"g-time"},hhmm(m)),cells));
+  }
+  if(!free){
+    const opts=[];
+    if(state.dur===90)opts.push(h("button",{type:"button",class:"btn small",onclick:()=>{state.dur=60;renderBook()}},"Essayer 60 min"));
+    if(state.date!==addDays(todayKey(),DAYS_AHEAD))opts.push(h("button",{type:"button",class:"btn small court",onclick:()=>{state.date=addDays(state.date,1);renderBook()}},"Jour suivant"));
+    el.append(h("div",{class:"empty",id:"emptyState"},h("strong",{},"Rien de libre en "+state.dur+" min ce jour-là"),h("span",{},"Essaie une autre durée ou un autre jour."),h("div",{class:"row-btns"},opts)));
+    if(!rows.length)return;
+  }
+  const head=h("div",{class:"g-row g-head"},h("div",{}),courts.map(c=>h("div",{class:"g-court",title:courtLabel(c)},h("strong",{},c.name),h("span",{class:"tag "+(c.indoor?"in":"out")},c.indoor?"INT.":"EXT."))));
+  el.append(head,...rows);
+  if(isToday&&hidden)el.append(h("p",{class:"hint"},"Les créneaux déjà commencés aujourd'hui sont masqués."));
+}
+
+/* ---------- Feuille de récap ---------- */
+function openSheet(sel){
+  if(!state.canBook){toast(readOnlyText(),true);return}
+  state.sheet={...sel,players:4,payment:"sur_place",busy:false,error:""};
+  renderSheet();
+}
+function closeSheet(){state.sheet=null;$("#sheetWrap").hidden=true;$("#sheetWrap").replaceChildren()}
+function renderSheet(){
+  const s=state.sheet;if(!s)return;
+  const wrap=$("#sheetWrap");
+  const prevName=$("#sName")?$("#sName").value:(state.myName||"");
+  const prevPhone=$("#sPhone")?$("#sPhone").value:"";
+  const c=courtById(s.courtId),total=priceOf(s.date,s.start,s.dur),each=perPlayer(total,s.players);
+  const tariff=tariffOf(s.date,s.start);
+  const start=startDate(s.date,s.start);
+  const deadline=new Date(start.getTime()-CANCEL_HOURS*3600e3);
+  const late=deadline<=new Date();
+  const stillFree=cellState(s.courtId,s.date,s.start,s.dur,new Date())==="free";
+  const err=s.error||(!stillFree?"Ce créneau vient d'être pris. Ferme et choisis-en un autre.":"");
+  const sheet=h("div",{class:"sheet",role:"dialog","aria-modal":"true","aria-labelledby":"sTitle"},
+    h("div",{class:"grab"}),
+    h("div",{},h("p",{class:"label"},"Récapitulatif"),h("h2",{id:"sTitle"},"Terrain "+c.name)),
+    h("div",{class:"meta"},
+      h("span",{},h("b",{},fmtDate(s.date))),
+      h("span",{class:"num"},h("b",{},hhmm(s.start)+" → "+hhmm(s.start+s.dur))," · "+s.dur+" min"),
+      h("span",{},(c.indoor?"Intérieur ":"Extérieur ")+c.kind),
+      h("span",{class:"chip"+(tariff==="creuse"?" ok":"")},tariff==="creuse"?"Heure creuse":"Heure pleine")),
+    h("div",{class:"field"},h("span",{class:"label",id:"pLbl"},"Joueurs"),
+      h("div",{class:"seg",role:"group","aria-labelledby":"pLbl"},
+        [2,4].map(n=>h("button",{type:"button",id:"sPlayers"+n,"aria-pressed":String(s.players===n),onclick:()=>{s.players=n;renderSheet()}},n+" joueurs")))),
+    h("div",{class:"price"},
+      h("div",{class:"big",id:"sEach"},each,h("small",{},"MAD")),
+      h("p",{},"par joueur",h("br"),"Terrain : ",h("b",{class:"num",id:"sTotal"},total+" MAD"),h("br"),"aucun frais en plus")),
+    h("div",{class:"field"},h("label",{class:"label",for:"sName"},"Nom pour la réservation"),
+      h("input",{id:"sName",autocomplete:"name",maxlength:"40",placeholder:"Ex. Yassine B.",value:prevName})),
+    h("div",{class:"field"},h("label",{class:"label",for:"sPhone"},"Téléphone (facultatif, pour le club)"),
+      h("input",{id:"sPhone",type:"tel",autocomplete:"tel",maxlength:"20",placeholder:"06 12 34 56 78",value:prevPhone})),
+    h("fieldset",{class:"radio",style:"border:0;padding:0;margin:0"},
+      h("legend",{class:"label",style:"margin-bottom:6px"},"Paiement"),
+      h("label",{},h("input",{type:"radio",name:"pay",id:"payPlace",checked:s.payment==="sur_place",onchange:()=>s.payment="sur_place"}),"Sur place, à l'accueil (espèces ou carte)"),
+      h("label",{},h("input",{type:"radio",name:"pay",id:"payDemo",checked:s.payment==="paye_demo",onchange:()=>s.payment="paye_demo"}),"Payé en ligne (démo, aucun débit)")),
+    h("div",{class:"policy"+(late?" late":""),id:"sPolicy"},late
+      ?"Ce match commence dans moins de 24 h : une fois confirmé, il ne pourra plus être annulé depuis l'app."
+      :"Annulation gratuite jusqu'au "+fmtDate(dateKey(deadline))+" à "+hhmm(deadline.getHours()*60+deadline.getMinutes())+" (24 h avant). Ensuite, contacte l'accueil du club."),
+    err?h("p",{class:"err",id:"sErr",role:"alert"},err):null,
+    h("div",{class:"actions"},
+      h("button",{type:"button",class:"btn",onclick:closeSheet},"Retour"),
+      h("button",{type:"button",class:"btn primary",id:"sConfirm",disabled:s.busy||!stillFree,onclick:confirmBooking},s.busy?"Envoi…":"Confirmer · "+total+" MAD"))
+  );
+  wrap.replaceChildren(sheet);wrap.hidden=false;
+  wrap.onclick=e=>{if(e.target===wrap)closeSheet()};
+}
+async function confirmBooking(){
+  const s=state.sheet;if(!s||s.busy)return;
+  const name=$("#sName").value.trim(),phone=$("#sPhone").value.trim();
+  if(!name){s.error="Indique un nom pour que le club retrouve la réservation.";renderSheet();$("#sName").focus();return}
+  if(upcomingMine().length>=MAX_UPCOMING){s.error=errMsg({code:"limit"});renderSheet();return}
+  if(cellState(s.courtId,s.date,s.start,s.dur,new Date())!=="free"){s.error=errMsg(conflict());renderSheet();return}
+  const total=priceOf(s.date,s.start,s.dur);
+  const id=rid(14);
+  const b={id,code:newCode(),courtId:s.courtId,date:s.date,start:hhmm(s.start),duration:s.dur,end:hhmm(s.start+s.dur),
+    slotKeys:slotKeys(s.courtId,s.date,s.start,s.dur),userId:state.uid,contactName:name,phone,players:s.players,
+    tariff:tariffOf(s.date,s.start),priceTotal:total,pricePerPlayer:perPlayer(total,s.players),
+    payment:s.payment,paid:s.payment==="paye_demo",status:"confirmed",createdAt:new Date().toISOString()};
+  const cells=[];for(let m=s.start;m<s.start+s.dur;m+=30)cells.push({key:slotKey(s.courtId,s.date,m),time:hhmm(m)});
+  s.busy=true;s.error="";renderSheet();
+  try{
+    await store.createBooking(b,cells);
+    state.lastBooking=b;closeSheet();setView("ticket");
+  }catch(e){
+    s.busy=false;s.error=errMsg(e);renderSheet();
+  }
+}
+
+/* ---------- Billet ---------- */
+function shareText(b){
+  const c=courtById(b.courtId);
+  return "🎾 Padel au "+CLUB.name+" ("+CLUB.city+")\n"+
+    "Terrain "+c.name+" ("+(c.indoor?"intérieur":"extérieur")+")\n"+
+    fmtDate(b.date)+" · "+b.start+"–"+b.end+" ("+b.duration+" min)\n"+
+    "Part par joueur : "+b.pricePerPlayer+" MAD (terrain "+b.priceTotal+" MAD, "+b.players+" joueurs)\n"+
+    "Code : "+b.code;
+}
+const waLink=b=>"https://wa.me/?text="+encodeURIComponent(shareText(b));
+async function copyText(text,pre){
+  try{await navigator.clipboard.writeText(text);toast("Message copié")}
+  catch(e){if(pre){const r=document.createRange();r.selectNodeContents(pre);const sel=getSelection();sel.removeAllRanges();sel.addRange(r)}toast("Copie bloquée : le message est sélectionné, copie-le à la main.")}
+}
+function renderTicket(){
+  const b=state.lastBooking,el=$("#view-ticket");
+  if(!b){setView("book");return}
+  const c=courtById(b.courtId);
+  const qr=h("div",{class:"qr",id:"qr","aria-label":"QR code du billet "+b.code});
+  const pre=h("pre",{class:"msg",id:"shareMsg"},shareText(b));
+  el.replaceChildren(
+    h("div",{class:"ticket"},
+      h("div",{class:"ticket-top"},h("span",{class:"label",style:"color:inherit;opacity:.85"},"Mabrouk"),h("h1",{id:"t-ticket"},"Yallah, c'est réservé !")),
+      h("div",{class:"ticket-body"},
+        h("div",{},h("p",{class:"label",style:"margin:0 0 6px"},"Code à montrer à l'accueil"),h("div",{class:"code",id:"ticketCode"},b.code)),qr),
+      h("dl",{class:"ticket-list"},
+        h("dt",{},"Terrain"),h("dd",{},c.name+" · "+(c.indoor?"intérieur":"extérieur")),
+        h("dt",{},"Date"),h("dd",{},fmtDate(b.date)),
+        h("dt",{},"Horaire"),h("dd",{class:"num"},b.start+" → "+b.end),
+        h("dt",{},"Joueurs"),h("dd",{},b.players),
+        h("dt",{},"Par joueur"),h("dd",{class:"num"},b.pricePerPlayer+" MAD"),
+        h("dt",{},"Total terrain"),h("dd",{class:"num"},b.priceTotal+" MAD"),
+        h("dt",{},"Paiement"),h("dd",{},b.paid?"Payé (démo)":"Sur place"))),
+    h("div",{class:"stack"},
+      h("a",{class:"btn court wide",id:"waBtn",href:waLink(b),target:"_blank",rel:"noopener"},"Partager sur WhatsApp"),
+      pre,
+      h("button",{type:"button",class:"btn wide",onclick:()=>copyText(shareText(b),pre)},"Copier le message"),
+      h("div",{class:"actions"},
+        h("button",{type:"button",class:"btn",onclick:()=>setView("mine")},"Mes résas"),
+        h("button",{type:"button",class:"btn primary",onclick:()=>setView("book")},"Nouvelle résa")))
+  );
+  try{if(window.QRCode)new QRCode(qr,{text:b.code,width:132,height:132,colorDark:"#0F1A14",colorLight:"#FFFFFF",correctLevel:QRCode.CorrectLevel.M});else qr.hidden=true}catch(e){qr.hidden=true}
+}
+
+/* ---------- Mes réservations ---------- */
+function renderMine(){
+  for(const b of document.querySelectorAll("#mineSeg button"))b.setAttribute("aria-pressed",String(b.dataset.p===state.period));
+  const now=new Date(),list=$("#mineList");
+  const items=state.mine.filter(b=>state.period==="next"?(b.status==="confirmed"&&bookingStart(b)>now):(b.status!=="confirmed"||bookingStart(b)<=now))
+    .sort((a,b)=>state.period==="next"?bookingStart(a)-bookingStart(b):bookingStart(b)-bookingStart(a));
+  if(!items.length){
+    list.replaceChildren(h("div",{class:"empty"},h("strong",{},state.period==="next"?"Pas encore de match":"Rien dans l'historique"),
+      state.period==="next"?h("button",{type:"button",class:"btn primary",onclick:()=>setView("book")},"Réserver un terrain"):null));
+    return;
+  }
+  list.replaceChildren(...items.map(b=>{
+    const c=courtById(b.courtId),past=bookingStart(b)<=now,ok=canCancel(b,now);
+    const chips=[];
+    if(b.status==="cancelled")chips.push(h("span",{class:"chip cancel"},"Annulée"));
+    else if(past)chips.push(h("span",{class:"chip"},"Jouée"));
+    else chips.push(h("span",{class:"chip ok"},"Confirmée"));
+    if(b.status==="confirmed")chips.push(h("span",{class:"chip"+(b.paid?" paid":"")},b.paid?"Payée":"À payer sur place"));
+    const btns=[];
+    if(b.status==="confirmed"&&!past){
+      btns.push(h("button",{type:"button",class:"btn small",onclick:()=>{state.lastBooking=b;setView("ticket")}},"Billet"));
+      btns.push(h("a",{class:"btn small",href:waLink(b),target:"_blank",rel:"noopener"},"Partager"));
+      if(state.confirmCancel===b.id){
+        btns.push(h("button",{type:"button",class:"btn small danger",id:"cancelYes-"+b.id,onclick:()=>doCancel(b,false)},"Oui, annuler"));
+        btns.push(h("button",{type:"button",class:"btn small",onclick:()=>{state.confirmCancel=null;renderMine()}},"Garder"));
+      }else btns.push(h("button",{type:"button",class:"btn small danger",id:"cancel-"+b.id,disabled:!ok,onclick:()=>{state.confirmCancel=b.id;renderMine()}},"Annuler"));
+    }
+    return h("article",{class:"card","data-id":b.id},
+      h("div",{class:"card-head"},
+        h("div",{},h("h3",{},fmtDate(b.date)+" · "+b.start),h("p",{class:"small-note"},"Terrain "+c.name+" · "+b.duration+" min · "+b.players+" joueurs")),
+        h("div",{style:"text-align:right"},h("b",{class:"num",style:"font-size:18px"},b.pricePerPlayer+" MAD"),h("p",{class:"small-note"},"par joueur"))),
+      h("div",{class:"chips"},chips,h("span",{class:"chip num"},b.code)),
+      btns.length?h("div",{class:"row-btns"},btns):null,
+      (b.status==="confirmed"&&!past&&!ok)?h("p",{class:"small-note"},"Moins de 24 h avant le match : l'annulation se fait auprès de l'accueil du club."):null);
+  }));
+}
+async function doCancel(b,asAdmin){
+  try{
+    if(!asAdmin&&!canCancel(b))throw{code:"late"};
+    await store.cancelBooking(b);state.confirmCancel=null;
+    toast(asAdmin?"Réservation annulée, créneau libéré":"Réservation annulée. Le créneau est de nouveau libre.");
+    if(asAdmin)refreshAdmin();else renderMine();
+  }catch(e){toast(e&&e.code==="late"?"Trop tard pour annuler depuis l'app : contacte l'accueil du club.":errMsg(e),true)}
+}
+
+/* ---------- Espace club ---------- */
+let adminTimer=null,adminSeq=0;
+function refreshAdmin(){clearTimeout(adminTimer);adminTimer=setTimeout(loadAdmin,250)}
+async function loadAdmin(){
+  if(!state.isAdmin||!store)return;
+  const seq=++adminSeq,k=state.adminDate;
+  const refs=new Map();
+  for(const s of state.slots.values())if(s.type==="booking"&&s.date===k&&!refs.has(s.refId))refs.set(s.refId,{refId:s.refId,userId:s.userId});
+  try{const list=await store.getBookings([...refs.values()]);if(seq!==adminSeq)return;state.adminBookings=list.filter(b=>b.status==="confirmed")}
+  catch(e){toast(errMsg(e),true)}
+  renderClub();
+}
+function renderClub(){
+  renderDates($("#adminDates"),state.adminDate,k=>{state.adminDate=k;state.adminBookings=[];renderClub();refreshAdmin()});
+  const k=state.adminDate;
+  const blocks=new Map();
+  for(const s of state.slots.values())if(s.type==="block"&&s.date===k){
+    const t=toMin(s.time),x=blocks.get(s.refId);
+    if(!x)blocks.set(s.refId,{refId:s.refId,courtId:s.courtId,reason:s.reason||"",start:t,end:t+30});
+    else{x.start=Math.min(x.start,t);x.end=Math.max(x.end,t+30)}
+  }
+  const bk=state.adminBookings.filter(b=>b.date===k);
+  const due=bk.reduce((a,b)=>a+b.priceTotal,0),paid=bk.filter(b=>b.paid).reduce((a,b)=>a+b.priceTotal,0);
+  $("#adminStats").replaceChildren(
+    h("div",{class:"stat"},h("b",{},bk.length),h("span",{},"matchs")),
+    h("div",{class:"stat"},h("b",{},due),h("span",{},"MAD attendus")),
+    h("div",{class:"stat"},h("b",{},paid),h("span",{},"MAD encaissés")));
+  const items=[...bk.map(b=>({t:toMin(b.start),b})),...[...blocks.values()].map(x=>({t:x.start,x}))].sort((a,b)=>a.t-b.t||(a.b?a.b.courtId:a.x.courtId).localeCompare(b.b?b.b.courtId:b.x.courtId));
+  const plan=$("#adminPlan");
+  if(!items.length){plan.replaceChildren(h("div",{class:"empty"},h("strong",{},"Aucun match ni blocage le "+fmtDate(k)),h("span",{},"Les réservations apparaissent ici en direct.")));}
+  else plan.replaceChildren(...items.map(it=>{
+    if(it.x){const x=it.x,c=courtById(x.courtId);
+      return h("div",{class:"plan-item block"},h("div",{class:"plan-time"},hhmm(x.start),h("small",{},hhmm(x.end))),
+        h("div",{class:"plan-main"},h("strong",{},"Terrain "+c.name+" · fermé"),h("p",{},x.reason||"Sans motif"),
+          h("div",{class:"row-btns",style:"justify-content:flex-start"},h("button",{type:"button",class:"btn small",onclick:async()=>{try{await store.removeBlock(x.refId);toast("Plage débloquée")}catch(e){toast(errMsg(e),true)}}},"Débloquer"))));
+    }
+    const b=it.b,c=courtById(b.courtId);
+    const btns=[h("button",{type:"button",class:"btn small",onclick:async()=>{try{await store.markPaid(b,!b.paid);b.paid=!b.paid;renderClub()}catch(e){toast(errMsg(e),true)}}},b.paid?"Marquer à payer":"Marquer encaissé")];
+    if(state.confirmCancel===b.id){
+      btns.push(h("button",{type:"button",class:"btn small danger",onclick:()=>doCancel(b,true)},"Oui, annuler"));
+      btns.push(h("button",{type:"button",class:"btn small",onclick:()=>{state.confirmCancel=null;renderClub()}},"Garder"));
+    }else btns.push(h("button",{type:"button",class:"btn small danger",onclick:()=>{state.confirmCancel=b.id;renderClub()}},"Annuler"));
+    return h("div",{class:"plan-item"},h("div",{class:"plan-time"},b.start,h("small",{},b.end)),
+      h("div",{class:"plan-main"},h("strong",{},"Terrain "+c.name+" · "+b.contactName),
+        h("p",{},b.players+" joueurs · "+b.priceTotal+" MAD"+(b.phone?" · "+b.phone:"")+" · "+b.code),
+        h("div",{class:"chips"},h("span",{class:"chip"+(b.paid?" paid":"")},b.paid?"Encaissé":"À encaisser")),
+        h("div",{class:"row-btns",style:"justify-content:flex-start"},btns)));
+  }));
+}
+function setupAdminForms(){
+  $("#bCourt").replaceChildren(...COURTS.map(c=>h("option",{value:c.id},c.name+" ("+(c.indoor?"intérieur":"extérieur")+")")));
+  const starts=[],ends=[];for(let m=CLUB.open;m<CLUB.close;m+=30){starts.push(m);ends.push(m+30)}
+  $("#bStart").replaceChildren(...starts.map(m=>h("option",{value:m},hhmm(m))));
+  $("#bEnd").replaceChildren(...ends.map(m=>h("option",{value:m},m===1440?"00:00 (minuit)":hhmm(m))));
+  $("#bStart").value="600";$("#bEnd").value="720";
+  $("#blockForm").addEventListener("submit",async e=>{
+    e.preventDefault();const err=$("#bErr");err.hidden=true;
+    const courtId=$("#bCourt").value,start=Number($("#bStart").value),end=Number($("#bEnd").value);
+    const reason=$("#bReason").value.trim();
+    if(end<=start){err.textContent="L'heure de fin doit être après l'heure de début.";err.hidden=false;return}
+    const k=state.adminDate,cells=[];
+    for(let m=start;m<end;m+=30)cells.push({key:slotKey(courtId,k,m),time:hhmm(m)});
+    if(cells.some(c=>state.slots.has(c.key))){err.textContent="Une réservation ou un blocage occupe déjà une partie de cette plage. Annule-la d'abord depuis le planning.";err.hidden=false;return}
+    const btn=$("#bSubmit");btn.disabled=true;
+    try{await store.createBlock({id:"blk"+rid(10),courtId,date:k,reason},cells);$("#bReason").value="";toast("Plage bloquée")}
+    catch(e2){err.textContent=e2&&e2.code==="conflict"?"Une réservation occupe déjà cette plage. Annule-la d'abord depuis le planning.":errMsg(e2);err.hidden=false}
+    finally{btn.disabled=false}
+  });
+  $("#priceForm").addEventListener("submit",async e=>{
+    e.preventDefault();const err=$("#pErr");err.hidden=true;
+    const p={creuse60:Number($("#pc60").value),creuse90:Number($("#pc90").value),pleine60:Number($("#pp60").value),pleine90:Number($("#pp90").value)};
+    if(Object.values(p).some(v=>!Number.isFinite(v)||v<=0||v>5000)){err.textContent="Chaque tarif doit être un montant entre 1 et 5000 MAD.";err.hidden=false;return}
+    const btn=$("#pSubmit");btn.disabled=true;
+    try{await store.savePrices(p);priceFormDirty=false;toast("Tarifs enregistrés")}catch(e2){err.textContent=errMsg(e2);err.hidden=false}
+    finally{btn.disabled=false}
+  });
+  for(const id of["pc60","pc90","pp60","pp90"])$("#"+id).addEventListener("input",()=>priceFormDirty=true);
+  fillPriceForm();
+}
+let priceFormDirty=false;
+function fillPriceForm(){
+  if(priceFormDirty)return;const p=state.prices;
+  $("#pc60").value=p.creuse60;$("#pc90").value=p.creuse90;$("#pp60").value=p.pleine60;$("#pp90").value=p.pleine90;
+}
+
+/* ---------- Navigation ---------- */
+function setView(v){
+  if(v==="club"&&!state.isAdmin)v="book";
+  state.view=v;state.confirmCancel=null;
+  for(const id of["book","ticket","mine","club"])$("#view-"+id).hidden=id!==v;
+  for(const t of document.querySelectorAll(".tab")){const on=t.dataset.view===v||(v==="ticket"&&t.dataset.view==="book");if(on)t.setAttribute("aria-current","page");else t.removeAttribute("aria-current")}
+  if(v==="book")renderBook();
+  if(v==="ticket")renderTicket();
+  if(v==="mine")renderMine();
+  if(v==="club"){renderClub();refreshAdmin()}
+  window.scrollTo(0,0);
+}
+function readOnlyText(){
+  if(state.mode==="loading")return"Connexion à la base en cours, réessaie dans un instant.";
+  return"Tu peux consulter les disponibilités. Pour réserver, connecte-toi et demande au club un accès Contributeur à cette page.";
+}
+function renderChrome(){
+  const pill=$("#modePill");
+  if(state.mode==="demo"){pill.textContent="Démo";pill.className="pill demo"}
+  else if(state.mode==="db"){pill.textContent="En direct";pill.className="pill"}
+  else{pill.textContent="Connexion…";pill.className="pill"}
+  const n=$("#notices");n.replaceChildren();
+  if(state.mode==="demo")n.append(h("div",{class:"notice warn",id:"demoNotice"},"Mode démo : les réservations restent dans cet onglet et ne sont pas partagées."));
+  else if(state.mode==="db"&&!state.canBook)n.append(h("div",{class:"notice",id:"roNotice"},readOnlyText()));
+  $("#tabClub").hidden=!state.isAdmin;
+  const up=upcomingMine().length,badge=$("#mineBadge");badge.hidden=!up;badge.textContent=up;
+}
+function rerenderActive(){
+  renderChrome();
+  if(state.view==="book")renderGrid();
+  if(state.view==="mine")renderMine();
+  if(state.view==="club"){renderClub();refreshAdmin()}
+  if(state.sheet&&!state.sheet.busy){const ok=cellState(state.sheet.courtId,state.sheet.date,state.sheet.start,state.sheet.dur,new Date())==="free";const btn=$("#sConfirm");if(btn&&btn.disabled===ok)renderSheet()}
+}
+
+/* ---------- Démarrage ---------- */
+function bindStatic(){
+  for(const b of document.querySelectorAll("#durSeg button"))b.addEventListener("click",()=>{state.dur=Number(b.dataset.dur);renderBook()});
+  for(const b of document.querySelectorAll("#filterSeg button"))b.addEventListener("click",()=>{state.filter=b.dataset.f;renderBook()});
+  for(const b of document.querySelectorAll("#mineSeg button"))b.addEventListener("click",()=>{state.period=b.dataset.p;state.confirmCancel=null;renderMine()});
+  for(const t of document.querySelectorAll(".tab"))t.addEventListener("click",()=>setView(t.dataset.view));
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&state.sheet&&!state.sheet.busy)closeSheet()});
+  setupAdminForms();
+}
+function onDbError(e){if(e&&(e.code==="revoked"||e.code==="not_granted"||e.code==="capability_disabled")){state.canBook=false;renderChrome()}else if(e)toast(errMsg(e),true)}
+async function init(){
+  bindStatic();renderChrome();setView("book");
+  let db=null,user=null;
+  const cl=window.claude;
+  if(cl&&typeof cl.use==="function"){
+    try{[db,user]=await Promise.all([cl.use("db"),cl.use("user")])}catch(e){db=null}
+  }
+  try{store=db?await makeDbStore(db,user):makeDemoStore()}catch(e){store=makeDemoStore()}
+  state.mode=store.mode;state.uid=store.uid;state.isAdmin=store.isAdmin;state.canBook=store.canBook;state.myName=store.myName;
+  store.onConfig(cfg=>{
+    const p=cfg&&cfg.prices;state.prices={...DEFAULT_PRICES,...(p||{})};fillPriceForm();
+    if(state.view==="book")renderBook();if(state.sheet&&!state.sheet.busy)renderSheet();
+  },onDbError);
+  store.onSlots(list=>{const m=new Map();for(const s of list)if(s&&s.refId)m.set(s.key,s);state.slots=m;rerenderActive()},onDbError);
+  store.onMine(list=>{state.mine=list;state.mineIds=new Set(list.filter(b=>b.status==="confirmed").map(b=>b.id));rerenderActive()},onDbError);
+  renderChrome();if(state.view==="book")renderBook();
+  setInterval(()=>{if(state.view==="book"&&!state.sheet)renderGrid();renderChrome()},60000);
+}
+window.__bandeja={state,get store(){return store},slotKeys,tariffOf,priceOf,perPlayer,cellState,canCancel,shareText,waLink,setView,openSheet};
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
+})();
+</script>
+
+</body>
+</html>
